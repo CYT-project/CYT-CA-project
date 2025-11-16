@@ -1,0 +1,160 @@
+# CI/CD Pipeline for CIV2025 Template
+# This workflow demonstrates automated testing, building, and deployment
+
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  # Test and build all services
+  test-and-build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        cache-dependency-path: 'apps/node-service/package-lock.json'
+
+    - name: Set up Java
+      uses: actions/setup-java@v4
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+
+    - name: Cache Maven packages
+      uses: actions/cache@v3
+      with:
+        path: ~/.m2
+        key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
+        restore-keys: ${{ runner.os }}-m2
+
+    # Test Node.js service
+    - name: Test Node service
+      run: |
+        cd apps/node-service
+        npm install
+        npm test
+
+    # Build Node.js service Docker image
+    - name: Build Node service Docker image
+      run: |
+        docker build -t node-service:latest ./apps/node-service
+
+    # Test Spring service
+    - name: Test Spring service
+      run: |
+        cd apps/spring-service
+        mvn test
+
+    # Build Spring service Docker image
+    - name: Build Spring service Docker image
+      run: |
+        docker build -t spring-service:latest ./apps/spring-service
+
+    # Test and build React frontend
+    - name: Test React frontend
+      run: |
+        cd apps/frontend
+        npm install
+        npm test -- --coverage --watchAll=false
+
+    - name: Build React frontend
+      run: |
+        cd apps/frontend
+        npm run build
+
+    # Build frontend Docker image
+    - name: Build Frontend Docker image
+      run: |
+        docker build -t frontend:latest ./apps/frontend
+
+  # Deploy to staging (only on main branch)
+  deploy-staging:
+    needs: test-and-build
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: staging
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: us-east-1
+
+    # Deploy infrastructure with Terraform
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v3
+
+    - name: Terraform Init
+      run: |
+        cd infra/terraform
+        terraform init
+
+    - name: Terraform Plan
+      run: |
+        cd infra/terraform
+        terraform plan -var="environment=staging"
+
+    - name: Terraform Apply
+      run: |
+        cd infra/terraform
+        terraform apply -auto-approve -var="environment=staging"
+
+    # Build and push Docker images
+    - name: Log in to Container Registry
+      uses: docker/login-action@v3
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Build and push Node service
+      run: |
+        docker build -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/node-service:latest ./apps/node-service
+        docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/node-service:latest
+
+    - name: Build and push Spring service
+      run: |
+        docker build -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/spring-service:latest ./apps/spring-service
+        docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/spring-service:latest
+
+    - name: Build and push Frontend
+      run: |
+        docker build -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/frontend:latest ./apps/frontend
+        docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/frontend:latest
+
+  # Deploy to production (manual trigger)
+  deploy-production:
+    needs: deploy-staging
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+    - name: Deploy to Production
+      run: |
+        echo "Production deployment would go here"
+        echo "This could include:"
+        echo "- Blue/green deployments"
+        echo "- Database migrations"
+        echo "- Smoke tests"
+        echo "- Rollback procedures"

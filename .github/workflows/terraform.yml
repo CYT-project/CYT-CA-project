@@ -1,0 +1,70 @@
+# Infrastructure Deployment Pipeline
+# Demonstrates deploying infrastructure with Terraform
+
+name: Deploy Infrastructure
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'infra/terraform/**'
+
+jobs:
+  terraform:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v3
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: us-east-1
+
+    - name: Configure optional S3 backend
+      if: ${{ secrets.TF_STATE_BUCKET && secrets.TF_LOCK_TABLE && secrets.AWS_REGION }}
+      run: |
+        cat > infra/terraform/backend.tf <<'EOF'
+        terraform {
+          backend "s3" {
+            bucket = "${{ secrets.TF_STATE_BUCKET }}"
+            key    = "terraform.tfstate"
+            region = "${{ secrets.AWS_REGION }}"
+            dynamodb_table = "${{ secrets.TF_LOCK_TABLE }}"
+            encrypt = true
+          }
+        }
+        EOF
+
+    - name: Terraform Init
+      run: |
+        cd infra/terraform
+        terraform init
+
+    - name: Terraform Format
+      run: |
+        cd infra/terraform
+        terraform fmt -check
+
+    - name: Terraform Validate
+      run: |
+        cd infra/terraform
+        terraform validate
+
+    - name: Terraform Plan
+      run: |
+        cd infra/terraform
+        terraform plan -no-color -out=tfplan
+
+    # Only apply on main branch and with manual approval
+    - name: Terraform Apply
+      if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+      run: |
+        cd infra/terraform
+        terraform apply -auto-approve tfplan

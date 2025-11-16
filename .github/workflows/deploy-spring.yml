@@ -1,0 +1,85 @@
+# Spring Service Deployment Pipeline
+# Demonstrates deploying Java Spring Boot microservice
+
+name: Deploy Spring Service
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'apps/spring-service/**'
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up JDK
+      uses: actions/setup-java@v4
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+
+    - name: Cache Maven packages
+      uses: actions/cache@v3
+      with:
+        path: ~/.m2
+        key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
+        restore-keys: ${{ runner.os }}-m2
+
+    - name: Run tests
+      run: |
+        cd apps/spring-service
+        mvn test
+
+    - name: Build with Maven
+      run: |
+        cd apps/spring-service
+        mvn clean package -DskipTests
+
+    - name: Build Docker image
+      run: |
+        docker build -t spring-service:${{ github.sha }} ./apps/spring-service
+        docker tag spring-service:${{ github.sha }} spring-service:latest
+
+    # For demo: Log in to GitHub Container Registry
+    - name: Log in to Container Registry
+      uses: docker/login-action@v3
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Push Docker image
+      run: |
+        IMAGE_NAME=ghcr.io/${{ github.repository }}/spring-service
+        docker tag spring-service:latest $IMAGE_NAME:latest
+        docker tag spring-service:${{ github.sha }} $IMAGE_NAME:${{ github.sha }}
+        docker push $IMAGE_NAME:latest
+        docker push $IMAGE_NAME:${{ github.sha }}
+
+    # Alternative AWS deployment steps (commented out)
+    # - name: Configure AWS credentials
+    #   uses: aws-actions/configure-aws-credentials@v4
+    #   with:
+    #     aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+    #     aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+    #     aws-region: us-east-1
+    #
+    # - name: Login to Amazon ECR
+    #   id: login-ecr
+    #   uses: aws-actions/amazon-ecr-login@v2
+    #
+    # - name: Build and push to ECR
+    #   run: |
+    #     ECR_REGISTRY=${{ steps.login-ecr.outputs.registry }}
+    #     ECR_REPOSITORY=spring-service
+    #     docker tag spring-service:latest $ECR_REGISTRY/$ECR_REPOSITORY:latest
+    #     docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+    #
+    # - name: Update ECS service
+    #   run: |
+    #     aws ecs update-service --cluster civ2025-cluster --service spring-service --force-new-deployment

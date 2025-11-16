@@ -1,0 +1,82 @@
+# Docker Compose for local development
+# Demonstrates running all services together for development and testing
+
+version: '3.8'
+
+services:
+  # Node.js microservice
+  node-service:
+    build:
+      context: ./apps/node-service
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=development
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - civ2025-network
+
+  # Spring Boot microservice
+  spring-service:
+    build:
+      context: ./apps/spring-service
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      - SPRING_PROFILES_ACTIVE=development
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - civ2025-network
+
+  # Next.js frontend (development mode with hot reloading)
+  frontend:
+    build:
+      context: ./apps/frontend
+      dockerfile: Dockerfile.dev
+    ports:
+      - "3001:3000"  # Next.js runs on 3000, expose on 3001 to avoid conflict with node-service
+    volumes:
+      - ./apps/frontend:/app  # Mount source for hot reloading
+      - /app/node_modules  # Don't mount node_modules
+      - /app/.next  # Don't mount .next build directory
+    environment:
+      - NODE_ENV=development
+      - NEXT_PUBLIC_API_URL=http://localhost:3000
+    depends_on:
+      - node-service
+      - spring-service
+    networks:
+      - civ2025-network
+
+  # Nginx reverse proxy (for production-like setup)
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - frontend
+      - node-service
+      - spring-service
+    networks:
+      - civ2025-network
+
+networks:
+  civ2025-network:
+    driver: bridge
+
+# Optional: Add volumes for data persistence
+# volumes:
+#   postgres_data:
+#   redis_data:

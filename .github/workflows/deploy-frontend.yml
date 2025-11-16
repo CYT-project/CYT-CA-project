@@ -1,0 +1,66 @@
+# Frontend Deployment Pipeline
+# Demonstrates deploying React app to static hosting
+
+name: Deploy Frontend
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'apps/frontend/**'
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        cache-dependency-path: 'apps/frontend/package-lock.json'
+
+    - name: Install dependencies
+      run: |
+        cd apps/frontend
+        npm install
+
+    - name: Run linting
+      run: |
+        cd apps/frontend
+        npm run lint
+
+    - name: Run tests
+      run: |
+        cd apps/frontend
+        npm run test -- --ci --coverage --watchAll=false
+
+    - name: Build for production
+      run: |
+        cd apps/frontend
+        npm run build
+
+    # Deploy to GitHub Pages (for demo purposes)
+    - name: Deploy to GitHub Pages
+      uses: peaceiris/actions-gh-pages@v3
+      if: github.ref == 'refs/heads/main'
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        publish_dir: ./apps/frontend/build
+
+    # Alternative: Deploy to AWS S3 + CloudFront
+    # - name: Configure AWS credentials
+    #   uses: aws-actions/configure-aws-credentials@v4
+    #   with:
+    #     aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+    #     aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+    #     aws-region: us-east-1
+    #
+    # - name: Deploy to S3
+    #   run: |
+    #     aws s3 sync ./apps/frontend/build s3://your-frontend-bucket --delete
+    #     aws cloudfront create-invalidation --distribution-id YOUR_DISTRIBUTION_ID --paths "/*"
