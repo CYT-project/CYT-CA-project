@@ -7,8 +7,10 @@
 # Node.js
 node_modules/
 npm-debug.log*
+*.tgz
 
 # Java
+target/
 *.class
 *.war
 *.ear
@@ -17,7 +19,6 @@ npm-debug.log*
 .idea/
 *.iws
 *.ipr
-*.iml
 
 # Environment variables
 .env
