@@ -1,0 +1,88 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. clone repo
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      # 2. install JDK (for Spring Boot)
+      - name: Set up Java 17
+        uses: actions/setup-java@v3
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      # 3. install Node.js (for frontend + microservice)
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+
+      # 4. Build Spring Boot backend
+      - name: Build backend (mvn)
+        working-directory: apps/backend-spring-boot
+        run: ./mvnw -B clean package
+
+      # collect Spring Boot backend
+      - name: Upload backend artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: backend-jar
+          path: apps/backend-spring-boot/target/*.jar
+
+      # 5. build frontend
+      - name: Build frontend (npm)
+        working-directory: apps/frontend-react
+        run: |
+          npm ci
+          npm test -- --ci
+          npm run build
+
+      # 5. collect frontend
+      - name: Upload frontend build
+        uses: actions/upload-artifact@v3
+        with:
+          name: frontend-build
+          path: apps/frontend-react/dist/
+
+      # 6. build Node microservice
+      - name: Build node microservice
+        working-directory: apps/node-microservice
+        run: |
+          npm ci
+          npm test -- --ci
+          npm run build
+
+      # === START BACKEND & NODE-SERVICE FOR API TESTS ===
+
+      - name: Start Backend
+        working-directory: apps/backend-spring-boot
+        run: |
+          nohup mvn spring-boot:run -DskipTests &
+      - name: Start Node Service
+        working-directory: apps/node-microservice
+        run: |
+          nohup npm start &
+      
+      # 7. 15 secs delay
+      - name: Wait for services
+        run: sleep 15
+
+      # 8. install Newman
+      - name: Install Newman
+        run: npm install -g newman
+
+      # 9. run Postman API tests
+      - name: Run API tests with Newman
+        working-directory: ci/postman
+        run: |
+          newman run marketforge-api.postman_collection.json
+
