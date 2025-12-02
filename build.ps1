@@ -5,14 +5,14 @@ cd ../../
 
 Write-Host "Building Frontend..."
 cd apps/frontend-react
-npm ci
+npm install
 npm test
 npm run build
 cd ../../
 
 Write-Host "Building Node Microservice..."
 cd apps/node-microservice
-npm ci
+npm install
 npm test
 npm run build
 cd ../../
