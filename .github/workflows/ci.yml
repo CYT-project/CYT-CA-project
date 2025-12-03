@@ -64,6 +64,13 @@ jobs:
           npm test -- --ci
           npm run build
 
+      # collect Node microservice artifact
+      - name: Upload node microservice artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: node-microservice-package
+          path: apps/node-microservice/*.tgz
+
       # === START BACKEND & NODE-SERVICE FOR API TESTS ===
 
       - name: Start Backend
