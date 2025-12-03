@@ -58,7 +58,7 @@ jobs:
       - name: Build node microservice
         working-directory: apps/node-microservice
         run: |
-          npm ci
+          npm install
           npm test -- --ci
           npm run build
 
