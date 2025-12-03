@@ -43,7 +43,8 @@ jobs:
       - name: Build frontend (npm)
         working-directory: apps/frontend-react
         run: |
-          npm ci
+          rm -f package-lock.json
+          npm install
           npm test -- --ci
           npm run build
 
@@ -58,6 +59,7 @@ jobs:
       - name: Build node microservice
         working-directory: apps/node-microservice
         run: |
+          rm -f package-lock.json
           npm install
           npm test -- --ci
           npm run build
