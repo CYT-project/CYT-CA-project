@@ -4,27 +4,25 @@ on:
   push:
     branches:
       - main
-  workflow_dispatch: {} # permite rodar manualmente
+  workflow_dispatch: {} # allow manual deployments
 
 jobs:
   deploy:
     name: Deploy application to AWS ECS
     runs-on: ubuntu-latest
 
-    # IMPORTANTE:
-    # Se o job principal do CI tiver outro nome,
-    # você pode substituir aqui depois.
-    # Exemplo: needs: [build_and_test]
-    # Por enquanto deixamos comentado para não quebrar.
-    # needs: [ci]
-
     env:
       AWS_REGION: eu-west-1
 
-      # PLACEHOLDERS - serão alinhados com a infra da Ciara
+      # PLACEHOLDERS - to be aligned with Ciara's Terraform
       ECS_CLUSTER_NAME: cyt-ecs-cluster
       ECS_SERVICE_NAME: cyt-ecs-service
-      APP_HEALTHCHECK_URL: "https://example.com/health"
+
+      # Image that should be deployed to ECS (for example, built and pushed by another pipeline)
+      ECR_IMAGE: "123456789012.dkr.ecr.eu-west-1.amazonaws.com/cyt-app:latest"
+
+      # Health check endpoint behind ALB / API Gateway
+      APP_HEALTHCHECK_URL: "https://your-app-domain-or-alb/health"
 
     steps:
       - name: Checkout repository
@@ -37,33 +35,30 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
-      # Aqui assumimos que o CI da Yulia gera um artefato com a imagem.
-      # O nome do artefato e do arquivo podem ser ajustados depois com ela.
-      - name: Download image metadata artifact
+      # === INTEGRATION WITH CI ARTIFACTS ===
+      # Download the Node microservice package produced by the CI workflow
+      - name: Download node microservice artifact
         uses: actions/download-artifact@v4
         with:
-          name: docker-image
-          path: cd/
+          name: node-microservice-package
+          path: cd/artifacts
 
-      - name: Read image from metadata
-        id: image
+      - name: List downloaded artifacts
         run: |
-          echo "Image metadata file content:"
-          cat cd/image-metadata.json
-          IMAGE=$(jq -r '.image' cd/image-metadata.json)
-          echo "Using image: $IMAGE"
-          echo "image=$IMAGE" >> $GITHUB_OUTPUT
+          echo "Artifacts downloaded from CI:"
+          ls -R cd/artifacts
 
+      # === PREPARE ECS TASK DEFINITION ===
       - name: Prepare ECS task definition
         run: |
-          IMAGE="${{ steps.image.outputs.image }}"
-          echo "Updating task definition with image: $IMAGE"
+          IMAGE="${{ env.ECR_IMAGE }}"
+          echo "Using image: $IMAGE"
 
           jq --arg IMAGE "$IMAGE" '
             .containerDefinitions[0].image = $IMAGE
           ' cd/ecs-taskdef-base.json > cd/ecs-taskdef.json
 
-          echo "Resulting task definition:"
+          echo "Generated task definition:"
           cat cd/ecs-taskdef.json
 
       - name: Register new task definition
