@@ -27,3 +27,9 @@ variable "private_subnet_cidrs" {
   type        = list(string)
   default     = ["10.0.11.0/24", "10.0.12.0/24"]
 }
+
+variable "ecs_task_definition_arn" {
+  description = "Initial ECS task definition ARN (can be a placeholder, later updated by the CD pipeline)."
+  type        = string
+  default     = "arn:aws:ecs:eu-west-1:123456789012:task-definition/cyt-ca-placeholder"
+}
