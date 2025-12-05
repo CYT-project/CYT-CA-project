@@ -1,0 +1,99 @@
+name: CD - Deploy to ECS
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch: {} # permite rodar manualmente
+
+jobs:
+  deploy:
+    name: Deploy application to AWS ECS
+    runs-on: ubuntu-latest
+
+    # IMPORTANTE:
+    # Se o job principal do CI tiver outro nome,
+    # você pode substituir aqui depois.
+    # Exemplo: needs: [build_and_test]
+    # Por enquanto deixamos comentado para não quebrar.
+    # needs: [ci]
+
+    env:
+      AWS_REGION: eu-west-1
+
+      # PLACEHOLDERS - serão alinhados com a infra da Ciara
+      ECS_CLUSTER_NAME: cyt-ecs-cluster
+      ECS_SERVICE_NAME: cyt-ecs-service
+      APP_HEALTHCHECK_URL: "https://example.com/health"
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      # Aqui assumimos que o CI da Yulia gera um artefato com a imagem.
+      # O nome do artefato e do arquivo podem ser ajustados depois com ela.
+      - name: Download image metadata artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: docker-image
+          path: cd/
+
+      - name: Read image from metadata
+        id: image
+        run: |
+          echo "Image metadata file content:"
+          cat cd/image-metadata.json
+          IMAGE=$(jq -r '.image' cd/image-metadata.json)
+          echo "Using image: $IMAGE"
+          echo "image=$IMAGE" >> $GITHUB_OUTPUT
+
+      - name: Prepare ECS task definition
+        run: |
+          IMAGE="${{ steps.image.outputs.image }}"
+          echo "Updating task definition with image: $IMAGE"
+
+          jq --arg IMAGE "$IMAGE" '
+            .containerDefinitions[0].image = $IMAGE
+          ' cd/ecs-taskdef-base.json > cd/ecs-taskdef.json
+
+          echo "Resulting task definition:"
+          cat cd/ecs-taskdef.json
+
+      - name: Register new task definition
+        id: register
+        run: |
+          TASK_DEF_ARN=$(aws ecs register-task-definition \
+            --cli-input-json file://cd/ecs-taskdef.json \
+            --query "taskDefinition.taskDefinitionArn" \
+            --output text)
+
+          echo "New task definition ARN: $TASK_DEF_ARN"
+          echo "task_def_arn=$TASK_DEF_ARN" >> $GITHUB_OUTPUT
+
+      - name: Update ECS service
+        run: |
+          aws ecs update-service \
+            --cluster $ECS_CLUSTER_NAME \
+            --service $ECS_SERVICE_NAME \
+            --task-definition "${{ steps.register.outputs.task_def_arn }}" \
+            --force-new-deployment \
+            --region $AWS_REGION
+
+      - name: Wait for service stability
+        run: |
+          aws ecs wait services-stable \
+            --cluster $ECS_CLUSTER_NAME \
+            --services $ECS_SERVICE_NAME \
+            --region $AWS_REGION
+
+      - name: Smoke test - application health check
+        run: |
+          echo "Checking health at: $APP_HEALTHCHECK_URL"
+          curl -f "$APP_HEALTHCHECK_URL"
