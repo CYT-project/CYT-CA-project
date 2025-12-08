@@ -1,0 +1,43 @@
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+.terraform.lock.hcl
+
+# Node.js
+node_modules/
+npm-debug.log*
+*.tgz
+
+# Java
+target/
+*.class
+*.war
+*.ear
+*.jar
+*.iml
+.idea/
+*.iws
+*.ipr
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Build directories
+/build/
+/dist/
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/

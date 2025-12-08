@@ -1,0 +1,94 @@
+name: CD - Deploy to ECS
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch: {} # allow manual deployments
+
+jobs:
+  deploy:
+    name: Deploy application to AWS ECS
+    runs-on: ubuntu-latest
+
+    env:
+      AWS_REGION: eu-west-1
+
+      # PLACEHOLDERS - to be aligned with Ciara's Terraform
+      ECS_CLUSTER_NAME: cyt-ecs-cluster
+      ECS_SERVICE_NAME: cyt-ecs-service
+
+      # Image that should be deployed to ECS (for example, built and pushed by another pipeline)
+      ECR_IMAGE: "123456789012.dkr.ecr.eu-west-1.amazonaws.com/cyt-app:latest"
+
+      # Health check endpoint behind ALB / API Gateway
+      APP_HEALTHCHECK_URL: "https://your-app-domain-or-alb/health"
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      # === INTEGRATION WITH CI ARTIFACTS ===
+      # Download the Node microservice package produced by the CI workflow
+      - name: Download node microservice artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: node-microservice-package
+          path: cd/artifacts
+
+      - name: List downloaded artifacts
+        run: |
+          echo "Artifacts downloaded from CI:"
+          ls -R cd/artifacts
+
+      # === PREPARE ECS TASK DEFINITION ===
+      - name: Prepare ECS task definition
+        run: |
+          IMAGE="${{ env.ECR_IMAGE }}"
+          echo "Using image: $IMAGE"
+
+          jq --arg IMAGE "$IMAGE" '
+            .containerDefinitions[0].image = $IMAGE
+          ' cd/ecs-taskdef-base.json > cd/ecs-taskdef.json
+
+          echo "Generated task definition:"
+          cat cd/ecs-taskdef.json
+
+      - name: Register new task definition
+        id: register
+        run: |
+          TASK_DEF_ARN=$(aws ecs register-task-definition \
+            --cli-input-json file://cd/ecs-taskdef.json \
+            --query "taskDefinition.taskDefinitionArn" \
+            --output text)
+
+          echo "New task definition ARN: $TASK_DEF_ARN"
+          echo "task_def_arn=$TASK_DEF_ARN" >> $GITHUB_OUTPUT
+
+      - name: Update ECS service
+        run: |
+          aws ecs update-service \
+            --cluster $ECS_CLUSTER_NAME \
+            --service $ECS_SERVICE_NAME \
+            --task-definition "${{ steps.register.outputs.task_def_arn }}" \
+            --force-new-deployment \
+            --region $AWS_REGION
+
+      - name: Wait for service stability
+        run: |
+          aws ecs wait services-stable \
+            --cluster $ECS_CLUSTER_NAME \
+            --services $ECS_SERVICE_NAME \
+            --region $AWS_REGION
+
+      - name: Smoke test - application health check
+        run: |
+          echo "Checking health at: $APP_HEALTHCHECK_URL"
+          curl -f "$APP_HEALTHCHECK_URL"
