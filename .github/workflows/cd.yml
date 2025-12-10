@@ -1,15 +1,22 @@
 name: CD - Deploy to ECS
 
 on:
-  push:
-    branches:
-      - main
-  workflow_dispatch: {} # allow manual deployments
+  # Dispara automaticamente quando o CI terminar
+  workflow_run:
+    workflows: ["CI"]        # workflow name: name: CI
+    types:
+      - completed
+
+  # It still allows manual deployment if you want.
+  workflow_dispatch: {}
 
 jobs:
   deploy:
     name: Deploy application to AWS ECS
     runs-on: ubuntu-latest
+
+    # It only runs automatically if the CI has passed successfully.
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
 
     env:
       AWS_REGION: eu-west-1
@@ -35,18 +42,24 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
-      # === INTEGRATION WITH CI ARTIFACTS ===
-      # Download the Node microservice package produced by the CI workflow
-      - name: Download node microservice artifact
-        uses: actions/download-artifact@v4
+      # === INTEGRAÇÃO REAL COM OS ARTEFATOS DO CI ===
+      # Baixa o artefato "node-microservice-package" gerado pelo workflow CI
+      - name: Download node microservice artifact from CI
+        if: github.event_name == 'workflow_run'
+        uses: dawidd6/action-download-artifact@v3
         with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          # Pode ser nome do workflow (name: CI), em vez de filename
+          workflow: CI
+          run_id: ${{ github.event.workflow_run.id }}
           name: node-microservice-package
           path: cd/artifacts
 
       - name: List downloaded artifacts
+        if: github.event_name == 'workflow_run'
         run: |
           echo "Artifacts downloaded from CI:"
-          ls -R cd/artifacts
+          ls -R cd/artifacts || echo "No artifacts found"
 
       # === PREPARE ECS TASK DEFINITION ===
       - name: Prepare ECS task definition
