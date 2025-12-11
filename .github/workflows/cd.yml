@@ -1,15 +1,25 @@
 name: CD - Deploy to ECS
 
 on:
-  push:
-    branches:
-      - main
-  workflow_dispatch: {} # allow manual deployments
+  # It automatically triggers the CD when the "CI" workflow is complete.
+  workflow_run:
+    workflows: ["CI"]      # nome do workflow da Yulia (name: CI)
+    types:
+      - completed
+
+  # Allows manual deployment via the "Actions" tab on GitHub
+  workflow_dispatch:
 
 jobs:
   deploy:
     name: Deploy application to AWS ECS
     runs-on: ubuntu-latest
+
+    # It only runs automatically if the CI has completed successfully,
+    # but allows manual execution via workflow_dispatch.
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
 
     env:
       AWS_REGION: eu-west-1
@@ -18,7 +28,7 @@ jobs:
       ECS_CLUSTER_NAME: cyt-ecs-cluster
       ECS_SERVICE_NAME: cyt-ecs-service
 
-      # Image that should be deployed to ECS (for example, built and pushed by another pipeline)
+      # Image to be deployed in ECS (updated by another process/pipeline)
       ECR_IMAGE: "123456789012.dkr.ecr.eu-west-1.amazonaws.com/cyt-app:latest"
 
       # Health check endpoint behind ALB / API Gateway
@@ -34,19 +44,6 @@ jobs:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
-
-      # === INTEGRATION WITH CI ARTIFACTS ===
-      # Download the Node microservice package produced by the CI workflow
-      - name: Download node microservice artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: node-microservice-package
-          path: cd/artifacts
-
-      - name: List downloaded artifacts
-        run: |
-          echo "Artifacts downloaded from CI:"
-          ls -R cd/artifacts
 
       # === PREPARE ECS TASK DEFINITION ===
       - name: Prepare ECS task definition
