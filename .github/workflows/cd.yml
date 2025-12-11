@@ -1,22 +1,25 @@
 name: CD - Deploy to ECS
 
 on:
-  # Dispara automaticamente quando o CI terminar
+  # It automatically triggers the CD when the "CI" workflow is complete.
   workflow_run:
-    workflows: ["CI"]        # workflow name: name: CI
+    workflows: ["CI"]      # nome do workflow da Yulia (name: CI)
     types:
       - completed
 
-  # It still allows manual deployment if you want.
-  workflow_dispatch: {}
+  # Allows manual deployment via the "Actions" tab on GitHub
+  workflow_dispatch:
 
 jobs:
   deploy:
     name: Deploy application to AWS ECS
     runs-on: ubuntu-latest
 
-    # It only runs automatically if the CI has passed successfully.
-    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    # It only runs automatically if the CI has completed successfully,
+    # but allows manual execution via workflow_dispatch.
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
 
     env:
       AWS_REGION: eu-west-1
@@ -25,7 +28,7 @@ jobs:
       ECS_CLUSTER_NAME: cyt-ecs-cluster
       ECS_SERVICE_NAME: cyt-ecs-service
 
-      # Image that should be deployed to ECS (for example, built and pushed by another pipeline)
+      # Image to be deployed in ECS (updated by another process/pipeline)
       ECR_IMAGE: "123456789012.dkr.ecr.eu-west-1.amazonaws.com/cyt-app:latest"
 
       # Health check endpoint behind ALB / API Gateway
@@ -41,25 +44,6 @@ jobs:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
-
-      # === INTEGRAÇÃO REAL COM OS ARTEFATOS DO CI ===
-      # Baixa o artefato "node-microservice-package" gerado pelo workflow CI
-      - name: Download node microservice artifact from CI
-        if: github.event_name == 'workflow_run'
-        uses: dawidd6/action-download-artifact@v3
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          # Pode ser nome do workflow (name: CI), em vez de filename
-          workflow: CI
-          run_id: ${{ github.event.workflow_run.id }}
-          name: node-microservice-package
-          path: cd/artifacts
-
-      - name: List downloaded artifacts
-        if: github.event_name == 'workflow_run'
-        run: |
-          echo "Artifacts downloaded from CI:"
-          ls -R cd/artifacts || echo "No artifacts found"
 
       # === PREPARE ECS TASK DEFINITION ===
       - name: Prepare ECS task definition
