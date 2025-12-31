@@ -4,30 +4,19 @@ server:
 spring:
   application:
     name: marketforge-backend
-  # Database disabled for containerized deployment
-  autoconfigure:
-    exclude:
-      - org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration
-      - org.springframework.boot.autoconfigure.orm.jpa.HibernateJpaAutoConfiguration
-  # Serve React frontend static files
-  web:
-    resources:
-      static-locations: classpath:/META-INF/resources/,classpath:/resources/,classpath:/static/,classpath:/public/,file:/app/static/
-  mvc:
-    static-path-pattern: /**
-  # datasource:
-  #   url: jdbc:postgresql://localhost:5432/marketforge
-  #   username: postgres
-  #   password: postgres
-  #   driver-class-name: org.postgresql.Driver
-  # jpa:
-  #   hibernate:
-  #     ddl-auto: update
-  #   show-sql: true
-  #   properties:
-  #     hibernate:
-  #       format_sql: true
-  #       dialect: org.hibernate.dialect.PostgreSQLDialect
+  datasource:
+    url: jdbc:postgresql://localhost:5432/marketforge
+    username: postgres
+    password: postgres
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+        dialect: org.hibernate.dialect.PostgreSQLDialect
 
 # Logging configuration
 logging:
