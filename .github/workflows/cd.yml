@@ -113,6 +113,7 @@ jobs:
       # === PREPARE ECS TASK DEFINITION ===
       - name: Prepare ECS task definition
         run: |
+          echo "Deploying image with commit SHA: ${{ github.sha }}"
           # Use ECR repository from Terraform with current git SHA as tag
           IMAGE="${{ steps.terraform.outputs.ecr_repository }}:${{ github.sha }}"
           EXEC_ROLE="${{ steps.terraform.outputs.execution_role_arn }}"
