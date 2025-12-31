@@ -1,5 +1,4 @@
 name: CD - Deploy to ECS
-
 on:
   # It automatically triggers the CD when the "Build and Push Docker Images" workflow is complete.
   workflow_run:
