@@ -86,7 +86,7 @@ jobs:
           # Copy all artifacts to build context
           cp ../../artifacts/backend/*.jar ./app.jar
           cp -r ../../artifacts/frontend ./frontend-dist
-          cp -r ../../artifacts/node-microservice-package ./node-service
+          cp -r ../../artifacts/node-microservice ./node-service
           
           # Build Docker image with all components
           docker build -t ${{ steps.ecr.outputs.repository }}:${{ github.sha }} \
