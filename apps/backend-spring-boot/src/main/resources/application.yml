@@ -4,19 +4,13 @@ server:
 spring:
   application:
     name: marketforge-backend
-  datasource:
-    url: jdbc:postgresql://localhost:5432/marketforge
-    username: postgres
-    password: postgres
-    driver-class-name: org.postgresql.Driver
-  jpa:
-    hibernate:
-      ddl-auto: update
-    show-sql: true
-    properties:
-      hibernate:
-        format_sql: true
-        dialect: org.hibernate.dialect.PostgreSQLDialect
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration
+      - org.springframework.boot.autoconfigure.orm.jpa.HibernateJpaAutoConfiguration
+  web:
+    resources:
+      static-locations: file:/app/static/
 
 # Logging configuration
 logging:
@@ -24,3 +18,13 @@ logging:
     root: INFO
     org.springframework: INFO
     com.marketforge: DEBUG
+
+# Actuator endpoints
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: always
