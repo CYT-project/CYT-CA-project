@@ -8,6 +8,9 @@ CYT-CA-project/
 │   └── node-microservice/      # Node.js microservice
 ├── ci/
 │   └── postman/                # Postman collection for API tests
+├── cd/
+│   └── ecs-taskdef-base.json   # ECS task definition template
+├── infra/                      # Terraform infrastructure as code
 ├── .github/
 │   └── workflows/              # GitHub Actions CI/CD
 ├── build.ps1                   # PowerShell script for building
