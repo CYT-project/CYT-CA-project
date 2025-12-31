@@ -22,29 +22,33 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
       
-      # Download backend artifact from CI workflow
+      # Download artifacts from the CI workflow
       - name: Download backend artifact
         uses: actions/download-artifact@v4
         with:
           name: backend-jar
           path: ./artifacts/backend
+          github-token: ${{ secrets.GITHUB_TOKEN }}
           run-id: ${{ github.event.workflow_run.id }}
+          repository: ${{ github.repository }}
       
-      # Download frontend artifact
       - name: Download frontend artifact
         uses: actions/download-artifact@v4
         with:
           name: frontend-build
           path: ./artifacts/frontend
+          github-token: ${{ secrets.GITHUB_TOKEN }}
           run-id: ${{ github.event.workflow_run.id }}
+          repository: ${{ github.repository }}
       
-      # Download node microservice artifact
       - name: Download node microservice artifact
         uses: actions/download-artifact@v4
         with:
           name: node-microservice-package
           path: ./artifacts/node-microservice
+          github-token: ${{ secrets.GITHUB_TOKEN }}
           run-id: ${{ github.event.workflow_run.id }}
+          repository: ${{ github.repository }}
       
       # Configure AWS credentials
       - name: Configure AWS credentials
