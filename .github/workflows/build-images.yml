@@ -85,19 +85,20 @@ jobs:
       - name: Build and push application image
         working-directory: apps/backend-spring-boot
         run: |
-          echo "Building image with commit SHA: ${{ github.sha }}"
+          COMMIT_SHA="${{ github.event.workflow_run.head_sha || github.sha }}"
+          echo "Building image with commit SHA: $COMMIT_SHA"
           # Copy all artifacts to build context
           cp ../../artifacts/backend/*.jar ./app.jar
           cp -r ../../artifacts/frontend ./frontend-dist
           cp -r ../../artifacts/node-microservice ./node-service
           
           # Build Docker image with all components
-          docker build -t ${{ steps.ecr.outputs.repository }}:${{ github.sha }} \
+          docker build -t ${{ steps.ecr.outputs.repository }}:$COMMIT_SHA \
                        -t ${{ steps.ecr.outputs.repository }}:latest \
                        -f Dockerfile .
           
           # Push to ECR
-          docker push ${{ steps.ecr.outputs.repository }}:${{ github.sha }}
+          docker push ${{ steps.ecr.outputs.repository }}:$COMMIT_SHA
           docker push ${{ steps.ecr.outputs.repository }}:latest
       
       # SWAPPING TO SINGLE CONTAINER METHOD FOR CD ALIGNMENT
@@ -136,6 +137,7 @@ jobs:
       # Output image tags for next workflow
       - name: Output image information
         run: |
+          COMMIT_SHA="${{ github.event.workflow_run.head_sha || github.sha }}"
           echo "Image pushed to ECR:"
-          echo "  Application: ${{ steps.ecr.outputs.repository }}:${{ github.sha }}"
+          echo "  Application: ${{ steps.ecr.outputs.repository }}:$COMMIT_SHA"
           echo "  Latest: ${{ steps.ecr.outputs.repository }}:latest"
