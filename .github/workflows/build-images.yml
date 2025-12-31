@@ -83,10 +83,26 @@ jobs:
       - name: Build and push application image
         working-directory: apps/backend-spring-boot
         run: |
+          # Debug: Show what was downloaded
+          echo "=== Artifacts directory structure ==="
+          ls -la ../../artifacts/
+          echo "=== Backend artifacts ==="
+          ls -la ../../artifacts/backend/
+          echo "=== Frontend artifacts ==="
+          ls -la ../../artifacts/frontend/
+          echo "=== Node microservice artifacts ==="
+          ls -la ../../artifacts/node-microservice/
+          
           # Copy all artifacts to build context
           cp ../../artifacts/backend/*.jar ./app.jar
           cp -r ../../artifacts/frontend ./frontend-dist
           cp -r ../../artifacts/node-microservice ./node-service
+          
+          # Debug: Verify copies
+          echo "=== Build context ==="
+          ls -la ./
+          echo "=== Node service files ==="
+          ls -la ./node-service/
           
           # Build Docker image with all components
           docker build -t ${{ steps.ecr.outputs.repository }}:${{ github.sha }} \
