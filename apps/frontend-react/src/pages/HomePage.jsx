@@ -18,8 +18,7 @@ const HomePage = () => {
             Discover Amazing Digital Assets
           </h1>
           <p className="hero-text">
-            Find the perfect second or third hand digital assets for your next project. High-quality resources for developers, designers, and creators.\n
-            <img src="https://i.chzbgr.com/full/10517816576/hD0171878" alt="Image" /><img src="https://i.chzbgr.com/full/10517816576/hD0171878" alt="Image" />
+            Find the perfect digital assets for your next project. High-quality resources for developers, designers, and creators.
           </p>
           <div className="hero-actions">
             <Link
