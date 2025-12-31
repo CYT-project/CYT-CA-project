@@ -19,6 +19,7 @@ const HomePage = () => {
           </h1>
           <p className="hero-text">
             Find the perfect digital assets for your next project. High-quality resources for developers, designers, and creators.
+           <img src="https://i.chzbgr.com/full/10517816576/hD0171878" alt="Image" /><img src="https://i.chzbgr.com/full/10517816576/hD0171878" alt="Image" />
           </p>
           <div className="hero-actions">
             <Link
