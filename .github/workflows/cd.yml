@@ -159,7 +159,7 @@ jobs:
 
       - name: Smoke test - application health check
         run: |
-          HEALTH_URL="http://${{ steps.terraform.outputs.alb_dns }}/api/hello"
+          HEALTH_URL="http://${{ steps.terraform.outputs.alb_dns }}/health"
           echo "Checking health at: $HEALTH_URL"
           
           # Wait a few seconds for service to be fully ready
