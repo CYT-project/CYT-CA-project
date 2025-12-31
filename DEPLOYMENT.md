@@ -42,10 +42,11 @@ This project uses a **GitOps CI/CD pipeline** to automatically build, containeri
 - **Application Load Balancer**: Internet-facing, distributes traffic to ECS tasks
 - **Target Group**: Routes HTTP traffic to ECS tasks on port 8080
   - **Health Check**: `/health` endpoint (Spring Boot Actuator)
-  - Interval: 120 seconds
-  - Timeout: 60 seconds
+  - Interval: 30 seconds
+  - Timeout: 10 seconds
   - Healthy threshold: 2 checks
-  - Unhealthy threshold: 10 checks
+  - Unhealthy threshold: 3 checks
+  - Matcher: 200 status code
 - **Listener**: Forwards all HTTP (port 80) traffic to the target group
 
 #### ECS Cluster & Service (Lines 178-219)
@@ -57,6 +58,7 @@ This project uses a **GitOps CI/CD pipeline** to automatically build, containeri
   - Defines container image (replaced during deployment)
   - Maps port 8080
   - CloudWatch logs configuration
+  - Container health check: curl to `/health` every 30s, 60s grace period
   
 - **ECS Service**:
   - Desired count: 1 task
@@ -197,8 +199,8 @@ Run this **once** before using the main infrastructure.
 - Pushes to ECR repository
 
 **Dockerfile Strategy** (Multi-Component):
-- Base: `eclipse-temurin:17-jre`
-- Installs Node.js 18
+- Base: `ubuntu:latest`
+- Installs OpenJDK 17 JRE and Node.js 18
 - Copies all three components:
   - `backend.jar` → `/app/app.jar`
   - `frontend-dist/` → `/app/static/`
@@ -289,9 +291,13 @@ Run this **once** before using the main infrastructure.
 - `logConfiguration`:
   - Driver: `awslogs`
   - Stream prefix: `ecs`
-  - Log group: `/ecs/marketforge`
-  - Region: `eu-west-1`
-
+  - Log group: `/ecs/cyt-app`
+  - Region: `eu-west-1`- `healthCheck`:
+  - Command: `curl -f http://localhost:8080/health`
+  - Interval: 30 seconds
+  - Timeout: 5 seconds
+  - Retries: 3
+  - Start period: 60 seconds (grace period)
 **During Deployment**:
 The CD workflow uses `jq` to replace placeholders with actual values before registering with ECS.
 
@@ -331,16 +337,19 @@ The CD workflow uses `jq` to replace placeholders with actual values before regi
 5. **AWS ECS Deployment**
    - ECS pulls new image from ECR
    - Starts new task(s) in Fargate
+   - Container health check begins (60s grace period)
    - Registers new tasks with ALB target group
-   - ALB health checks new tasks (`/health`, 120s interval)
+   - ALB health checks new tasks (`/health`, 30s interval)
+   - Tasks become healthy after 2 consecutive successful checks (~60s)
    - Once healthy, routes traffic to new tasks
    - Drains old tasks
 
 6. **Application Live**
    - Access via ALB DNS: `http://<alb-dns>/`
-   - Frontend: Served as static files by Spring Boot
+   - Frontend: Served as static files by Spring Boot from `/app/static/`
    - Backend API: Spring Boot on `/api/*`
-   - Health check: `/health` (Spring Boot Actuator)
+   - Health check: `/health` (Spring Boot Actuator with `base-path: /`)
+   - Node.js microservice: Runs in background alongside Spring Boot
 
 ---
 
@@ -390,7 +399,7 @@ terraform output alb_dns_name
 
 ### View Logs
 ```bash
-aws logs tail /ecs/marketforge --follow --region eu-west-1
+aws logs tail /ecs/cyt-app --follow --region eu-west-1
 ```
 
 ### Manual Deployment
@@ -457,7 +466,7 @@ terraform destroy
 │                         │                                    │
 │                         ▼                                    │
 │  ┌──────────────────────────────────────────────────────┐   │
-│  │  CloudWatch Logs (/ecs/marketforge)                 │   │
+│  │  CloudWatch Logs (/ecs/cyt-app)                     │   │
 │  └──────────────────────────────────────────────────────┘   │
 │                                                              │
 │  ┌──────────────────────────────────────────────────────┐   │
@@ -500,7 +509,7 @@ terraform destroy
 ## Troubleshooting
 
 ### Deployment fails at "Wait for service stability"
-- Check CloudWatch Logs: `/ecs/marketforge`
+- Check CloudWatch Logs: `/ecs/cyt-app`
 - Common issues:
   - Health check failing (verify `/health` endpoint)
   - Image pull errors (check ECR permissions)
