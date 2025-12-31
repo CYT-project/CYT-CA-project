@@ -1,9 +1,9 @@
 # Multi-component Dockerfile: Backend + Frontend + Node Microservice
-FROM eclipse-temurin:17-jre
+FROM ubuntu:latest
 
-# Install Node.js for the microservice
+# Install Java 17 JRE and Node.js
 RUN apt-get update && \
-    apt-get install -y curl && \
+    apt-get install -y openjdk-17-jre curl && \
     curl -fsSL https://deb.nodesource.com/setup_18.x | bash - && \
     apt-get install -y nodejs && \
     apt-get clean && \
@@ -21,16 +21,17 @@ COPY frontend-dist/ /app/static/
 # Copy Node microservice
 COPY node-service/ /app/node-service/
 
+# Pre-install node dependencies at build time (not runtime)
+RUN cd /app/node-service && npm install --production
+
 # Expose ports
 EXPOSE 8080
 
 # Create startup script to run multiple services
 RUN echo '#!/bin/bash\n\
-# Start Node microservice in background\n\
-cd /app/node-service && npm install && npm start &\n\
-\n\
-# Start Spring Boot (foreground)\n\
-java -Xmx512m -Xms256m -jar /app/app.jar\n\
+set -e\n\
+echo "Starting Spring Boot..."\n\
+java -Xmx384m -Xms256m -jar /app/app.jar\n\
 ' > /app/start.sh && chmod +x /app/start.sh
 
 # Run startup script
