@@ -1,14 +1,39 @@
 name: CD - Deploy to ECS
 
 on:
-  # It automatically triggers the CD when the "CI" workflow is complete.
+  # It automatically triggers the CD when the "Build and Push Docker Images" workflow is complete.
   workflow_run:
-    workflows: ["CI"]      # nome do workflow da Yulia (name: CI)
+    workflows: ["Build and Push Docker Images"] # ciara - swapped to build-images - trying to avoid direct edits to cd.yml and ci.yml
     types:
       - completed
 
   # Allows manual deployment via the "Actions" tab on GitHub
   workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy to'
+        required: true
+        default: 'dev'
+        type: choice
+        options:
+          - dev
+          - staging
+          - prod
+
+env:
+  # Region mapping per environment
+  # Dev: single region for cost savings
+  # Staging: single region
+  # Prod: multi-region for HA and global coverage
+  REGIONS_DEV: eu-west-1
+  REGIONS_STAGING: eu-west-1
+  REGIONS_PROD: eu-west-1 # ,us-east-1,ap-southeast-1 // only one region for demo here
+  AWS_REGION: eu-west-1
+
+# permissions:
+  # Required for OIDC authentication
+  # id-token: write
+  # contents: read
 
 jobs:
   deploy:
@@ -21,18 +46,16 @@ jobs:
       github.event_name == 'workflow_dispatch' ||
       github.event.workflow_run.conclusion == 'success'
 
-    env:
-      AWS_REGION: eu-west-1
+    # Set environment based on input or default to dev
+    environment: ${{ github.event.inputs.environment || 'dev' }}
+    
+      # Deploy to multiple regions based on environment - didn't have time for this in the end - ciara
+      # strategy:
+      #  matrix:
+      #    region: $ {{ fromJSON(github.event.inputs.environment == 'prod' && '["eu-west-1", "us-east-1", "ap-southeast-1"]' || github.event.inputs.environment == 'staging' && '["eu-west-1"]' || '["eu-west-1"]') }}
+      # fail-fast: false
 
-      # PLACEHOLDERS - to be aligned with Ciara's Terraform
-      ECS_CLUSTER_NAME: cyt-ecs-cluster
-      ECS_SERVICE_NAME: cyt-ecs-service
 
-      # Image to be deployed in ECS (updated by another process/pipeline)
-      ECR_IMAGE: "123456789012.dkr.ecr.eu-west-1.amazonaws.com/cyt-app:latest"
-
-      # Health check endpoint behind ALB / API Gateway
-      APP_HEALTHCHECK_URL: "https://your-app-domain-or-alb/health"
 
     steps:
       - name: Checkout repository
@@ -43,12 +66,38 @@ jobs:
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ env.AWS_REGION }}
-
+          aws-region: ${{ env.aws_region }}
+      # === RETRIEVE TERRAFORM OUTPUTS ===
+      - name: Get Terraform outputs
+        id: terraform
+        run: |
+          cd infra
+          
+          # Get ECS cluster and service names
+          ECS_CLUSTER=$(terraform output -raw ecs_cluster_name)
+          ECS_SERVICE=$(terraform output -raw ecs_service_name)
+          
+          # Get ECR repository URL
+          ECR_REPO=$(terraform output -raw ecr_repository_url)
+          
+          # Get ALB DNS name for health check
+          ALB_DNS=$(terraform output -raw alb_dns_name)
+          
+          echo "ecs_cluster=$ECS_CLUSTER" >> $GITHUB_OUTPUT
+          echo "ecs_service=$ECS_SERVICE" >> $GITHUB_OUTPUT
+          echo "ecr_repository=$ECR_REPO" >> $GITHUB_OUTPUT
+          echo "alb_dns=$ALB_DNS" >> $GITHUB_OUTPUT
+          
+          echo "Retrieved Terraform outputs:"
+          echo "  ECS Cluster: $ECS_CLUSTER"
+          echo "  ECS Service: $ECS_SERVICE"
+          echo "  ECR Repository: $ECR_REPO"
+          echo "  ALB DNS: $ALB_DNS"
       # === PREPARE ECS TASK DEFINITION ===
       - name: Prepare ECS task definition
         run: |
-          IMAGE="${{ env.ECR_IMAGE }}"
+          # Use ECR repository from Terraform with current git SHA as tag
+          IMAGE="${{ steps.terraform.outputs.ecr_repository }}:${{ github.sha }}"
           echo "Using image: $IMAGE"
 
           jq --arg IMAGE "$IMAGE" '
@@ -72,20 +121,25 @@ jobs:
       - name: Update ECS service
         run: |
           aws ecs update-service \
-            --cluster $ECS_CLUSTER_NAME \
-            --service $ECS_SERVICE_NAME \
+            --cluster ${{ steps.terraform.outputs.ecs_cluster }} \
+            --service ${{ steps.terraform.outputs.ecs_service }} \
             --task-definition "${{ steps.register.outputs.task_def_arn }}" \
             --force-new-deployment \
-            --region $AWS_REGION
+            --region ${{ env.AWS_REGION }}
 
       - name: Wait for service stability
         run: |
           aws ecs wait services-stable \
-            --cluster $ECS_CLUSTER_NAME \
-            --services $ECS_SERVICE_NAME \
-            --region $AWS_REGION
+            --cluster ${{ steps.terraform.outputs.ecs_cluster }} \
+            --services ${{ steps.terraform.outputs.ecs_service }} \
+            --region ${{ env.AWS_REGION }}
 
       - name: Smoke test - application health check
         run: |
-          echo "Checking health at: $APP_HEALTHCHECK_URL"
-          curl -f "$APP_HEALTHCHECK_URL"
+          HEALTH_URL="http://${{ steps.terraform.outputs.alb_dns }}/api/hello"
+          echo "Checking health at: $HEALTH_URL"
+          
+          # Wait a few seconds for service to be fully ready
+          sleep 10
+          
+          curl -f "$HEALTH_URL"

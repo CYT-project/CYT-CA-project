@@ -1,0 +1,134 @@
+name: Build and Push Docker Images
+
+on:
+  # Trigger after CI completes successfully
+  workflow_run:
+    workflows: ["CI"]
+    types:
+      - completed
+
+env:
+  AWS_REGION: eu-west-1
+
+jobs:
+  build-and-push:
+    name: Build Docker images and push to ECR
+    runs-on: ubuntu-latest
+    
+    # Only run if CI succeeded
+    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      # Download backend artifact from CI workflow
+      - name: Download backend artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: backend-jar
+          path: ./artifacts/backend
+          run-id: ${{ github.event.workflow_run.id }}
+      
+      # Download frontend artifact
+      - name: Download frontend artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-build
+          path: ./artifacts/frontend
+          run-id: ${{ github.event.workflow_run.id }}
+      
+      # Download node microservice artifact
+      - name: Download node microservice artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: node-microservice-package
+          path: ./artifacts/node-microservice
+          run-id: ${{ github.event.workflow_run.id }}
+      
+      # Configure AWS credentials
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+      
+      # Setup Terraform
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+      
+      # Initialize Terraform and get outputs
+      - name: Get ECR repository URL
+        id: ecr
+        run: |
+          cd infra
+          terraform init
+          ECR_REPO=$(terraform output -raw ecr_repository_url)
+          echo "repository=$ECR_REPO" >> $GITHUB_OUTPUT
+          echo "ECR Repository: $ECR_REPO"
+      
+      # Login to Amazon ECR
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+      
+      # Build and push unified image with all components
+      - name: Build and push application image
+        working-directory: apps/backend-spring-boot
+        run: |
+          # Copy all artifacts to build context
+          cp ../../artifacts/backend/*.jar ./app.jar
+          cp -r ../../artifacts/frontend ./frontend-dist
+          cp -r ../../artifacts/node-microservice ./node-service
+          
+          # Build Docker image with all components
+          docker build -t ${{ steps.ecr.outputs.repository }}:${{ github.sha }} \
+                       -t ${{ steps.ecr.outputs.repository }}:latest \
+                       -f Dockerfile .
+          
+          # Push to ECR
+          docker push ${{ steps.ecr.outputs.repository }}:${{ github.sha }}
+          docker push ${{ steps.ecr.outputs.repository }}:latest
+      
+      # SWAPPING TO SINGLE CONTAINER METHOD FOR CD ALIGNMENT
+      # # Build and push frontend image
+      # - name: Build and push frontend image
+      #   working-directory: apps/frontend-react
+      #   run: |
+      #     # Copy artifact to build context
+      #     cp -r ../../artifacts/frontend/* ./dist/
+      #     
+      #     # Build Docker image
+      #     docker build -t {{ steps.ecr.outputs.repository }}:frontend-{{ github.sha }} \
+      #                  -t {{ steps.ecr.outputs.repository }}:frontend-latest \
+      #                  -f Dockerfile .
+      #     
+      #     # Push to ECR
+      #     docker push {{ steps.ecr.outputs.repository }}:frontend-{{ github.sha }}
+      #     docker push {{ steps.ecr.outputs.repository }}:frontend-latest
+      # 
+      # # Build and push node microservice image
+      # - name: Build and push node microservice image
+      #   working-directory: apps/node-microservice
+      #   run: |
+      #     # Copy artifact to build context
+      #     cp ../../artifacts/node-microservice/*.tgz ./package.tgz
+      #     
+      #     # Build Docker image
+      #     docker build -t {{ steps.ecr.outputs.repository }}:node-{{ github.sha }} \
+      #                  -t {{ steps.ecr.outputs.repository }}:node-latest \
+      #                  -f Dockerfile .
+      #     
+      #     # Push to ECR
+      #     docker push {{ steps.ecr.outputs.repository }}:node-{{ github.sha }}
+      #     docker push {{ steps.ecr.outputs.repository }}:node-latest
+      
+      # Output image tags for next workflow
+      - name: Output image information
+        run: |
+          echo "Image pushed to ECR:"
+          echo "  Application: ${{ steps.ecr.outputs.repository }}:${{ github.sha }}"
+          echo "  Latest: ${{ steps.ecr.outputs.repository }}:latest"
