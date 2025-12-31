@@ -24,11 +24,14 @@ COPY node-service/ /app/node-service/
 # Expose ports
 EXPOSE 8080
 
-# Create startup script to run multiple services
+# Create startup script to run Node and Spring Boot services
 RUN echo '#!/bin/bash\n\
 set -e\n\
+echo "Starting Node microservice..."\n\
+cd /app/node-service && node src/index.js &\n\
+\n\
 echo "Starting Spring Boot..."\n\
-java -Xmx384m -Xms256m -jar /app/app.jar\n\
+java -jar /app/app.jar\n\
 ' > /app/start.sh && chmod +x /app/start.sh
 
 # Run startup script
