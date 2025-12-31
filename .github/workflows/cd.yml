@@ -59,6 +59,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -112,9 +114,10 @@ jobs:
       # === PREPARE ECS TASK DEFINITION ===
       - name: Prepare ECS task definition
         run: |
-          echo "Deploying image with commit SHA: ${{ github.sha }}"
+          COMMIT_SHA="${{ github.event.workflow_run.head_sha || github.sha }}"
+          echo "Deploying image with commit SHA: $COMMIT_SHA"
           # Use ECR repository from Terraform with current git SHA as tag
-          IMAGE="${{ steps.terraform.outputs.ecr_repository }}:${{ github.sha }}"
+          IMAGE="${{ steps.terraform.outputs.ecr_repository }}:$COMMIT_SHA"
           EXEC_ROLE="${{ steps.terraform.outputs.execution_role_arn }}"
           TASK_ROLE="${{ steps.terraform.outputs.task_role_arn }}"
           echo "Using image: $IMAGE"
