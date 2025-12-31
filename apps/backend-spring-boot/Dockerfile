@@ -21,9 +21,6 @@ COPY frontend-dist/ /app/static/
 # Copy Node microservice
 COPY node-service/ /app/node-service/
 
-# Pre-install node dependencies at build time (not runtime)
-RUN cd /app/node-service && npm install --production
-
 # Expose ports
 EXPOSE 8080
 
